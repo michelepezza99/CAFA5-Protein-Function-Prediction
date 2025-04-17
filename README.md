@@ -3,7 +3,7 @@
 This repository contains the code and documentation for our project submitted to the CAFA5 challenge, where we predict the function of protein sequences using Protein Language Models (PLMs) like ProtBERT.
 
 ## 👥 Team Members
-- Akash Ankush Kamble ([akashank@buffalo.edu](mailto:akashank@buffalo.edu))
+- [Akash Ankush Kamble](https://github.com/kambleakash0) ([akashank@buffalo.edu](mailto:akashank@buffalo.edu))
 - Halle Bryant ([hallebry@buffalo.edu](mailto:hallebry@buffalo.edu))
 - Michele Pezza ([mpezza@buffalo.edu](mailto:mpezza@buffalo.edu))
 

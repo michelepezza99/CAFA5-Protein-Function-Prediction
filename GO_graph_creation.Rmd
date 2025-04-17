@@ -1,0 +1,160 @@
+---
+title: "GO Graph Creation"
+author: "Akash Kamble"
+date: "2025-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# GO Graph Creation
+
+### Install required packages if not already installed
+```{r}
+if (!requireNamespace("ontologyIndex", quietly = TRUE)) {
+  install.packages("ontologyIndex")
+}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+}
+if (!requireNamespace("igraph", quietly = TRUE)) {
+  install.packages("igraph")
+}
+if (!requireNamespace("ggraph", quietly = TRUE)) {
+  install.packages("ggraph")
+}
+```
+
+### Load required libraries
+```{r}
+library(ontologyIndex)
+library(dplyr)
+library(igraph)
+```
+
+### Function to create GO graph from OBO file and training terms
+```{r}
+create_go_graph <- function(obo_file_path, train_terms_path, output_path = "go_graph.RData") {
+  # Load the Gene Ontology OBO file
+  cat("Loading GO ontology from OBO file...\n")
+  ontology <- get_ontology(obo_file_path, propagate_relationships = c("is_a", "part_of"))
+  
+  # Load training terms
+  cat("Loading training terms...\n")
+  train_terms <- read.csv(train_terms_path, sep = "\t", header = TRUE)
+  
+  # Extract unique GO terms from training data
+  unique_terms <- unique(train_terms$term)
+  cat("Found", length(unique_terms), "unique GO terms in training data\n")
+  
+  # Filter ontology to include only terms relevant to training set and their ancestors
+  cat("Finding ancestors for all training terms...\n")
+  relevant_terms <- unique_terms
+  for (term in unique_terms) {
+    if (term %in% ontology$id) {
+      ancestors <- ontology$ancestors[[term]]
+      relevant_terms <- unique(c(relevant_terms, ancestors))
+    }
+  }
+  cat("Total relevant GO terms (including ancestors):", length(relevant_terms), "\n")
+  
+  # Create subgraph of relevant terms
+  cat("Creating ontology subgraph...\n")
+  filtered_ontology <- list(
+    id = relevant_terms,
+    name = ontology$name[relevant_terms],
+    parents = ontology$parents[relevant_terms],
+    children = ontology$children[relevant_terms],
+    ancestors = ontology$ancestors[relevant_terms]
+  )
+  
+  # Count terms by GO aspect
+  if ("namespace" %in% names(ontology)) {
+    term_aspects <- ontology$namespace[relevant_terms]
+    aspect_counts <- table(term_aspects)
+    cat("GO term counts by aspect:\n")
+    print(aspect_counts)
+  }
+  
+  # Convert to data frame for graph edges
+  edges <- data.frame(
+    child = rep(names(filtered_ontology$parents), sapply(filtered_ontology$parents, length)),
+    parent = unlist(filtered_ontology$parents)
+  )
+  cat("Number of edges in GO graph:", nrow(edges), "\n")
+  
+  # Create igraph object for network analysis
+  go_graph <- graph_from_data_frame(edges, directed = TRUE, 
+                                    vertices = data.frame(id = relevant_terms, 
+                                                         name = filtered_ontology$name))
+  
+  # Save the GO graph and related data
+  result <- list(
+    graph = go_graph,
+    ontology = filtered_ontology,
+    edges = edges,
+    term_count = length(relevant_terms)
+  )
+  
+  cat("Saving GO graph to", output_path, "\n")
+  save(result, file = output_path)
+  
+  return(result)
+}
+```
+
+### Usage
+```{r}
+go_graph_result <- create_go_graph(
+  obo_file_path = "data/Train/go-basic.obo",  # Path to GO OBO file
+  train_terms_path = "data/Train/train_terms.tsv",  # Path to training terms
+  output_path = "data/go_graph.RData"  # Output file path
+)
+```
+
+### Print summary
+```{r}
+cat("GO Graph Creation Complete!\n")
+cat("Number of terms:", go_graph_result$term_count, "\n")
+cat("Number of edges:", nrow(go_graph_result$edges), "\n")
+```
+
+### Create visualization of a subset of the graph (may be large)
+```{r}
+if (requireNamespace("ggraph", quietly = TRUE) && requireNamespace("ggplot2", quietly = TRUE)) {
+  library(ggraph)
+  library(ggplot2)
+  
+  # Take a small subset (first 20 nodes) for visualization
+  subgraph <- induced_subgraph(go_graph_result$graph, 
+                              sample(V(go_graph_result$graph)$name, 
+                                    min(20, length(V(go_graph_result$graph)))))
+  
+  # Plot the subgraph
+  ggraph(subgraph, layout = "fr") + 
+    geom_edge_link(arrow = arrow(length = unit(2, "mm")), 
+                   end_cap = circle(3, "mm")) + 
+    geom_node_point(size = 3) +
+    geom_node_text(aes(label = name), repel = TRUE, size = 3) +
+    theme_graph() +
+    labs(title = "Sample of Gene Ontology Graph")
+  
+  # ggsave("data/go_graph_sample.pdf", width = 10, height = 8)
+  ggsave("data/go_graph_sample.png", width = 10, height = 8)
+}
+```
+
+```{r}
+plot(subgraph, 
+     edge.arrow.size = 0.5,
+     edge.width = 2,
+     edge.color = "blue",
+     vertex.color = "red",
+     vertex.size = 2,
+     vertex.label.cex = 0.8,
+     #layout = layout_with_sugiyama(subgraph
+     )
+```
+
